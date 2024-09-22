@@ -2,49 +2,43 @@ package ru.clevertec.manager;
 
 import ru.clevertec.model.Topic;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class TopicManager {
-    private final List<Topic> topics = new ArrayList<>();
-    private final Map<String, Lock> topicLocks = new HashMap<>();
-    private final Map<String, Condition> topicConditions = new HashMap<>();
+    private final Map<String, Topic> topics = new HashMap<>();
     private final Lock globalLock = new ReentrantLock();
 
     public void createTopic(String topicName) {
         globalLock.lock();
         try {
-            createTopicLock(topicName);
-            Topic topic = new Topic(topicName);
-            topics.add(topic);
+            topics.put(topicName, new Topic(topicName));
         } finally {
             globalLock.unlock();
         }
     }
 
     public void publishMessage(String topicName, String message) {
-        Lock lock = topicLocks.get(topicName);
+        Lock lock = topics.get(topicName).getLock();
         lock.lock();
         try {
             Topic topic = getTopicByName(topicName);
             topic.getMessages().add(message);
-            topicConditions.get(topicName).signalAll();
+            topics.get(topicName).getCondition().signalAll();
         } finally {
             lock.unlock();
         }
     }
 
     public String consumeMessage(String topicName, int lastReadIndex) throws InterruptedException {
-        Lock lock = topicLocks.get(topicName);
+        Lock lock = topics.get(topicName).getLock();
         lock.lock();
         try {
             Topic topic = getTopicByName(topicName);
-            Condition condition = topicConditions.get(topicName);
+            Condition condition = topics.get(topicName).getCondition();
             while (lastReadIndex + 1 >= topic.getMessages().size()) {
                 condition.await();
             }
@@ -54,22 +48,12 @@ public class TopicManager {
         }
     }
 
-    private void createTopicLock(String topicName) {
-        if(topicLocks.containsKey(topicName)) {
-            return;
+    private Topic getTopicByName(String topicName) {
+        Topic topic = topics.get(topicName);
+        if (topic == null) {
+            throw new IllegalArgumentException("Topic not found: " + topicName);
         }
-        Lock lock = new ReentrantLock();
-        topicLocks.put(topicName, lock);
-        topicConditions.put(topicName, lock.newCondition());
-    }
-
-    private Topic getTopicByName(String name) {
-        for (Topic topic : topics) {
-            if (topic.getName().equals(name)) {
-                return topic;
-            }
-        }
-        throw new IllegalArgumentException("Topic " + name + " not found");
+        return topic;
     }
 }
 
