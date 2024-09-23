@@ -22,23 +22,23 @@ public class TopicManager {
     }
 
     public void publishMessage(String topicName, String message) {
-        Lock lock = topics.get(topicName).getLock();
+        Topic topic = getTopicByName(topicName);
+        Lock lock = topic.getLock();
         lock.lock();
         try {
-            Topic topic = getTopicByName(topicName);
             topic.getMessages().add(message);
-            topics.get(topicName).getCondition().signalAll();
+            topic.getCondition().signalAll();
         } finally {
             lock.unlock();
         }
     }
 
     public String consumeMessage(String topicName, int lastReadIndex) throws InterruptedException {
-        Lock lock = topics.get(topicName).getLock();
+        Topic topic = getTopicByName(topicName);
+        Lock lock = topic.getLock();
         lock.lock();
         try {
-            Topic topic = getTopicByName(topicName);
-            Condition condition = topics.get(topicName).getCondition();
+            Condition condition = topic.getCondition();
             while (lastReadIndex + 1 >= topic.getMessages().size()) {
                 condition.await();
             }
